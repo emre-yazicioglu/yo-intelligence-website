@@ -10,10 +10,24 @@
   <meta name="color-scheme" content="light dark">
   <meta name="theme-color" content="#fafafa" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#111111" media="(prefers-color-scheme: dark)">
-  <!-- REPLACE-FAVICON: activate only after the unchanged approved chip files exist.
-  <link rel="icon" type="image/svg+xml" href="assets/brand/chip-on-light.svg" media="(prefers-color-scheme: light)">
-  <link rel="icon" type="image/svg+xml" href="assets/brand/chip-on-dark.svg" media="(prefers-color-scheme: dark)">
-  Final favicon and social-sharing assets are pending; no substitute logo is loaded. -->
+  <!-- Original approved favicons. Light defaults also provide a no-JavaScript fallback. -->
+  <link id="favicon-ico" rel="icon" type="image/vnd.microsoft.icon" sizes="16x16 24x24 32x32 48x48" href="assets/brand/YO_Favicon_Light.ico">
+  <link id="favicon-svg" rel="icon" type="image/svg+xml" sizes="any" href="assets/brand/YO_Favicon_32_Light.svg">
+  <script>
+  // Select supplied assets without modifying them; the page theme remains CSS-native.
+  (function () {
+    if (typeof window.matchMedia !== 'function') return;
+    const preference = window.matchMedia('(prefers-color-scheme: dark)');
+    function updateFavicon() {
+      const theme = preference.matches ? 'Dark' : 'Light';
+      document.getElementById('favicon-ico').setAttribute('href', 'assets/brand/YO_Favicon_' + theme + '.ico');
+      document.getElementById('favicon-svg').setAttribute('href', 'assets/brand/YO_Favicon_32_' + theme + '.svg');
+    }
+    updateFavicon();
+    if (preference.addEventListener) preference.addEventListener('change', updateFavicon);
+    else if (preference.addListener) preference.addListener(updateFavicon);
+  }());
+  </script>
   <style>
 /* Y/O Intelligence — refined V1. Native system themes; no scripts or external fonts.
    Sections follow the approved page order. Final branding is supplied separately. */
@@ -515,7 +529,7 @@ h3 { font-size: 22px; line-height: 1.32; letter-spacing: -.025em; }
     </section>
   </main>
 
-  <footer class="site-footer container">
+  <footer class="site-footer container" id="footer">
     <p class="footer-brand">Y/O Intelligence</p>
     <a href="legal-notice.html">Legal Notice</a>
     <a href="privacy-policy.html">Privacy Policy</a>

@@ -9,6 +9,24 @@
   <meta name="color-scheme" content="light dark">
   <meta name="theme-color" content="#fafafa" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#111111" media="(prefers-color-scheme: dark)">
+  <!-- Original approved favicons. Light defaults also provide a no-JavaScript fallback. -->
+  <link id="favicon-ico" rel="icon" type="image/vnd.microsoft.icon" sizes="16x16 24x24 32x32 48x48" href="assets/brand/YO_Favicon_Light.ico">
+  <link id="favicon-svg" rel="icon" type="image/svg+xml" sizes="any" href="assets/brand/YO_Favicon_32_Light.svg">
+  <script>
+  // Select supplied assets without modifying them; the page theme remains CSS-native.
+  (function () {
+    if (typeof window.matchMedia !== 'function') return;
+    const preference = window.matchMedia('(prefers-color-scheme: dark)');
+    function updateFavicon() {
+      const theme = preference.matches ? 'Dark' : 'Light';
+      document.getElementById('favicon-ico').setAttribute('href', 'assets/brand/YO_Favicon_' + theme + '.ico');
+      document.getElementById('favicon-svg').setAttribute('href', 'assets/brand/YO_Favicon_32_' + theme + '.svg');
+    }
+    updateFavicon();
+    if (preference.addEventListener) preference.addEventListener('change', updateFavicon);
+    else if (preference.addListener) preference.addListener(updateFavicon);
+  }());
+  </script>
   <style>
 /* Y/O Intelligence — refined V1. Native system themes; no scripts or external fonts.
    Sections follow the approved page order. Final branding is supplied separately. */
@@ -180,6 +198,8 @@ h3 { font-size: 22px; line-height: 1.32; letter-spacing: -.025em; }
 .contact-copy .review-note { margin-top: 14px; }
 .site-footer { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 22px; padding-block: 28px; }
 .footer-brand { color: var(--ink); font-size: 14px; }
+.footer-brand a { text-decoration: none; }
+.footer-brand a:hover { text-decoration: underline; }
 .site-footer > a { display: inline-flex; align-items: center; min-height: 44px; gap: 14px; font-size: 13px; text-decoration: none; }
 .site-footer > a:hover { text-decoration: underline; }
 
@@ -250,6 +270,7 @@ h3 { font-size: 22px; line-height: 1.32; letter-spacing: -.025em; }
 
 
 /* Legal document layout, scoped to these pages. */
+.legal-back { display: inline-flex; align-items: center; min-height: 44px; margin-bottom: 20px; color: var(--muted); font-size: 14px; }
 .legal-content { max-width: 70ch; padding-block: var(--section-space); }
 .legal-content h1 { margin-bottom: 36px; font-size: clamp(32px, 3.1vw, 44px); line-height: 1.18; letter-spacing: -.04em; }
 .legal-content p + p { margin-top: 24px; }
@@ -279,6 +300,7 @@ h3 { font-size: 22px; line-height: 1.32; letter-spacing: -.025em; }
   </header>
   <main id="main" class="container" tabindex="-1">
     <article class="legal-content" aria-labelledby="legal-title">
+      <a class="legal-back" href="index.html#footer">← Back to website</a>
 <h1 id="legal-title">Privacy Policy</h1>
 <p><strong>Last updated:</strong> 8 October 2026</p>
 <p>Y/O Intelligence is committed to protecting personal information in accordance with the General Data Protection Regulation (GDPR).</p>
@@ -305,7 +327,7 @@ h3 { font-size: 22px; line-height: 1.32; letter-spacing: -.025em; }
     </article>
   </main>
   <footer class="site-footer container">
-    <p class="footer-brand">Y/O Intelligence</p>
+    <p class="footer-brand"><a href="index.html#footer">Y/O Intelligence</a></p>
     <a href="legal-notice.html">Legal Notice</a>
     <a href="privacy-policy.html">Privacy Policy</a>
     <a href="#top">Back to top <span aria-hidden="true">↑</span></a>
