@@ -461,7 +461,7 @@ h3 { font-size: 22px; line-height: 1.32; letter-spacing: -.025em; }
               <legend>How would you like to start?</legend>
               <div class="reception-options">
                 <label class="reception-option"><input type="radio" name="entry_mode" value="contact" checked><span>Contact Emre</span></label>
-                <label class="reception-option"><input type="radio" name="entry_mode" value="business"><span>Business / Collaboration Enquiry</span></label>
+                <label class="reception-option"><input type="radio" name="entry_mode" value="business"><span>Project &amp; Collaboration Enquiry</span></label>
                 <label class="reception-option"><input type="radio" name="entry_mode" value="challenge"><span>Explore a Business Challenge</span></label>
               </div>
             </fieldset>
@@ -482,7 +482,7 @@ h3 { font-size: 22px; line-height: 1.32; letter-spacing: -.025em; }
                   <div class="reception-opening" id="reception-opening" hidden>
                     <p class="reception-phase" id="reception-phase">01 / Context</p>
                     <h3 id="reception-prompt"></h3>
-                    <p class="reception-help" id="reception-guidance">Share the context. Answer up to two useful follow-up questions if needed, then review your enquiry before submitting.</p>
+                    <p class="reception-help" id="reception-guidance">Share the context. Answer up to 2 focused follow-up questions only if useful, then review your enquiry before submitting.</p>
                     <div class="reception-starters" id="reception-starters" role="group" aria-label="Optional conversation starters"></div>
                   </div>
                   <ol class="reception-transcript" id="reception-transcript" aria-label="Enquiry conversation" role="list" hidden></ol>
@@ -644,7 +644,8 @@ h3 { font-size: 22px; line-height: 1.32; letter-spacing: -.025em; }
   const notConnected = 'Online submission is not available yet. Nothing has been sent. Please email Emre directly at emre@yo-intelligence.com.';
   const openings = {
     business: {
-      helper: 'AI-assisted guided enquiry. Share some initial context and you may be asked 1–2 short follow-up questions before your enquiry is summarized for review.',
+      maxFollowups: 2,
+      helper: 'AI-assisted guided enquiry. Share some initial context and you may be asked up to 2 focused follow-up questions, only when useful, before your enquiry is summarized for review.',
       prompt: 'What opportunity would you like to discuss?',
       label: 'Your initial enquiry *',
       placeholder: 'Describe the opportunity and the kind of support you are looking for.',
@@ -655,7 +656,8 @@ h3 { font-size: 22px; line-height: 1.32; letter-spacing: -.025em; }
       ]
     },
     challenge: {
-      helper: 'AI-assisted guided exploration. Describe the challenge and you may be asked 1–2 focused questions before the context is summarized for review.',
+      maxFollowups: 4,
+      helper: 'AI-assisted guided exploration. Describe the challenge and you may be asked up to 4 focused follow-up questions, only when useful, before the context is summarized for review.',
       prompt: 'What process or operational challenge would you like to explore?',
       label: 'Your initial context *',
       placeholder: 'Describe the process or operational challenge you would like to explore.',
@@ -718,6 +720,7 @@ h3 { font-size: 22px; line-height: 1.32; letter-spacing: -.025em; }
       get('reception-prompt').textContent = openings[activeMode].prompt;
       get('reception-prompt').hidden = started || review;
       get('reception-guidance').hidden = started || review;
+      get('reception-guidance').textContent = `Share the context. Answer up to ${openings[activeMode].maxFollowups} focused follow-up questions only if useful, then review your enquiry before submitting.`;
       if (!started && !review) openings[activeMode].starters.forEach(([label, text]) => {
         const button = document.createElement('button');
         button.type = 'button';
@@ -808,7 +811,7 @@ h3 { font-size: 22px; line-height: 1.32; letter-spacing: -.025em; }
       if (thisRequest !== requestNumber) return;
       // UI turn bound only. Backend still owns question selection and policy.
       // Reject an extra follow-up instead of inventing a summary to end the flow.
-      if (!reply.handoff_ready && session.followups >= 2) throw new api.ReceptionUnavailable();
+      if (!reply.handoff_ready && session.followups >= openings[session.mode].maxFollowups) throw new api.ReceptionUnavailable();
       api.acceptReply(session, message, reply);
       if (!reply.handoff_ready) session.followups += 1;
     } catch (_) {
