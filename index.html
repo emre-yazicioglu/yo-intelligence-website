@@ -394,7 +394,7 @@ h3 { font-size: 22px; line-height: 1.32; letter-spacing: -.025em; }
         <li>
           <span class="step-number" aria-hidden="true">04</span>
           <h3>Validate</h3>
-          <p>Check results against agreed criteria, document limitations, and define next steps for continuous improvement.</p>
+          <p>Check results against agreed criteria, document limitations, and define next steps for value tracking.</p>
         </li>
       </ol>
       <div class="approach-note">
@@ -485,7 +485,7 @@ h3 { font-size: 22px; line-height: 1.32; letter-spacing: -.025em; }
                   <div class="reception-opening" id="reception-opening" hidden>
                     <p class="reception-phase" id="reception-phase">01 / Context</p>
                     <h3 id="reception-prompt"></h3>
-                    <p class="reception-help" id="reception-guidance">Share the context. Answer up to 2 focused follow-up questions only if useful, then review your enquiry before submitting.</p>
+                    <p class="reception-help" id="reception-guidance">Share the context. Answer up to 3 focused follow-up questions only if useful, then review your enquiry before submitting.</p>
                     <div class="reception-starters" id="reception-starters" role="group" aria-label="Optional conversation starters"></div>
                   </div>
                   <ol class="reception-transcript" id="reception-transcript" aria-label="Enquiry conversation" role="list" hidden></ol>
@@ -649,8 +649,8 @@ h3 { font-size: 22px; line-height: 1.32; letter-spacing: -.025em; }
   const notConnected = 'Online submission is not available yet. Nothing has been sent. Please email Emre directly at emre@yo-intelligence.com.';
   const openings = {
     business: {
-      maxFollowups: 2,
-      helper: 'AI-assisted guided enquiry. Share some initial context and you may be asked up to 2 focused follow-up questions, only when useful, before your enquiry is summarized for review.',
+      maxFollowups: 3,
+      helper: 'AI-assisted guided enquiry. Share some initial context and you may be asked a few focused questions to help structure your enquiry before it is summarized for review.',
       prompt: 'What opportunity would you like to discuss?',
       label: 'Your initial enquiry *',
       placeholder: 'Describe the opportunity and the kind of support you are looking for.',
@@ -661,8 +661,8 @@ h3 { font-size: 22px; line-height: 1.32; letter-spacing: -.025em; }
       ]
     },
     challenge: {
-      maxFollowups: 4,
-      helper: 'AI-assisted guided exploration. Describe the challenge and you may be asked up to 4 focused follow-up questions, only when useful, before the context is summarized for review.',
+      maxFollowups: 6,
+      helper: 'AI-assisted guided exploration. Describe the challenge and you may be asked a few focused questions to help clarify the context before it is summarized for review.',
       prompt: 'What process or operational challenge would you like to explore?',
       label: 'Your initial context *',
       placeholder: 'Describe the process or operational challenge you would like to explore.',
