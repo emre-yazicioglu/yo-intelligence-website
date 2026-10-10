@@ -457,7 +457,7 @@ h3 { font-size: 22px; line-height: 1.32; letter-spacing: -.025em; }
             <p>He will review the context and discuss whether Y/O Intelligence is a good fit and what a useful first step could look like.</p>
           </div>
         </div>
-        <div id="intelligent-reception" data-reception-endpoint="/api/reception" aria-label="Contact and guided enquiry">
+        <div id="intelligent-reception" data-reception-endpoint="/api/reception" data-handoff-endpoint="/api/handoff" aria-label="Contact and guided enquiry">
           <p id="reception-noscript">The enquiry interface requires JavaScript. You can email <a href="mailto:emre@yo-intelligence.com">emre@yo-intelligence.com</a> directly.</p>
           <div id="reception-controls" hidden>
             <fieldset class="reception-modes">
@@ -496,7 +496,7 @@ h3 { font-size: 22px; line-height: 1.32; letter-spacing: -.025em; }
                   </div>
                   <div class="reception-review" id="reception-review" hidden>
                     <h3 id="reception-review-title" tabindex="-1">Review your enquiry</h3>
-                    <p class="reception-help">Check the summary before confirming. Nothing has been submitted yet.</p>
+                    <p class="reception-help">Please review the message before sending. Nothing will be sent until you click Send message.</p>
                     <dl class="reception-summary">
                       <dt id="reception-summary-label">Summary</dt>
                       <dd id="reception-summary-text"></dd>
@@ -506,7 +506,7 @@ h3 { font-size: 22px; line-height: 1.32; letter-spacing: -.025em; }
                       <p id="reception-original-text"></p>
                     </details>
                     <div class="reception-actions">
-                      <button class="button" id="reception-confirm" type="button">Confirm &amp; Submit</button>
+                      <button class="button" id="reception-confirm" type="button">Send message</button>
                       <button class="reception-secondary" id="reception-edit" type="button">Edit enquiry</button>
                     </div>
                   </div>
@@ -522,7 +522,7 @@ h3 { font-size: 22px; line-height: 1.32; letter-spacing: -.025em; }
               <p class="reception-status" id="reception-success" role="status" hidden>Thanks. Your enquiry has been received. Emre will review it and get back to you.</p>
             </div>
           </div>
-          <p class="reception-sr-only" id="reception-delivery-status">Online submission is not available yet. You can email Emre directly.</p>
+          <p class="reception-sr-only" id="reception-delivery-status">Your enquiry remains unsent until you click Send message.</p>
         </div>
 
       </div>
@@ -536,8 +536,6 @@ h3 { font-size: 22px; line-height: 1.32; letter-spacing: -.025em; }
     <a href="#top">Back to top <span aria-hidden="true">↑</span></a>
   </footer>
 <script>
-/* Browser transport only. Qualification, routing and commercial boundaries live
-   in the existing backend. No handoff, mail or Discovery execution is implemented. */
 (function (root, factory) {
   'use strict';
   const api = factory();
@@ -545,15 +543,28 @@ h3 { font-size: 22px; line-height: 1.32; letter-spacing: -.025em; }
   else root.YOReception = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
+
   const modes = new Set(['contact', 'business', 'challenge']);
 
   class ReceptionUnavailable extends Error {
     constructor() { super('Reception is unavailable.'); this.name = 'ReceptionUnavailable'; }
   }
 
+  class HandoffUnavailable extends Error {
+    constructor() { super('Handoff is unavailable.'); this.name = 'HandoffUnavailable'; }
+  }
+
   function createSession(mode, id) {
     if (!modes.has(mode) || typeof id !== 'string' || !id) throw new TypeError('Invalid session.');
-    return { mode, id, context: [], draft: '', result: null, localDraft: false, error: false, busy: false };
+    return {
+      mode,
+      id,
+      context: [],
+      draft: '',
+      result: null,
+      busy: false,
+      sent: false
+    };
   }
 
   function requestBody(session, message, contact) {
@@ -564,43 +575,54 @@ h3 { font-size: 22px; line-height: 1.32; letter-spacing: -.025em; }
         typeof contact.email !== 'string' || !contact.email.trim()) {
       throw new TypeError('Name and email are required.');
     }
+
     return {
       name: contact.name.trim(),
       email: contact.email.trim(),
       message: message.trim(),
       entry_mode: session.mode,
-      conversation_context: session.context.map(item => ({ role: item.role, message: item.message })),
+      conversation_context: session.context.map(item => ({
+        role: item.role,
+        message: item.message
+      })),
       session_id: session.id
     };
   }
 
   async function requestReply(session, message, options = {}) {
     const fetchImpl = options.fetchImpl || fetch;
-    const signal = options.signal;
     const endpoint = options.endpoint || '/api/reception';
+    const signal = options.signal;
+
     try {
       const response = await fetchImpl(endpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-        credentials: 'same-origin',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
         cache: 'no-store',
         signal,
         body: JSON.stringify(requestBody(session, message, options.contact))
       });
+
       if (!response.ok) throw new ReceptionUnavailable();
+
       const data = await response.json();
-      // Check only the envelope needed to safely render a reply. This is not
-      // the backend qualification/schema policy and does not replace it.
-      if (!data || typeof data.next_message !== 'string' || !data.next_message.trim() ||
-          typeof data.handoff_ready !== 'boolean' || typeof data.next_action !== 'string' ||
+
+      if (!data ||
+          typeof data.next_message !== 'string' ||
+          typeof data.handoff_ready !== 'boolean' ||
+          typeof data.next_action !== 'string' ||
           data.session_id !== session.id ||
-          (data.summary != null && typeof data.summary !== 'string')) {
+          !data.captured_context ||
+          typeof data.captured_context !== 'object') {
         throw new ReceptionUnavailable();
       }
+
       return data;
     } catch (error) {
       if (signal && signal.aborted) throw error;
-      // Do not pass provider/backend diagnostics to the page.
       throw new ReceptionUnavailable();
     }
   }
@@ -610,29 +632,114 @@ h3 { font-size: 22px; line-height: 1.32; letter-spacing: -.025em; }
     session.context.push({ role: 'reception', message: reply.next_message });
     session.result = reply;
     session.draft = '';
-    session.localDraft = false;
-    session.error = false;
   }
 
-  function preparedText(session) {
-    if (session.localDraft) return session.draft;
-    const visitorText = session.context.filter(item => item.role === 'visitor').map(item => item.message).join('\n\n');
-    if (session.mode === 'contact') return visitorText;
-    const summary = session.result && session.result.summary;
-    return summary ? 'Summary\n' + summary + '\n\nYour messages\n' + visitorText : visitorText;
+  function prepareContact(session, message, contact) {
+    const clean = message.trim();
+
+    session.context = [{ role: 'visitor', message: clean }];
+    session.draft = '';
+    session.result = {
+      session_id: session.id,
+      intent: 'direct_contact',
+      route: 'handoff',
+      questions_asked: 0,
+      captured_context: {
+        contact_name: contact.name.trim(),
+        company: null,
+        role_or_need: clean,
+        problem: null,
+        scope: null,
+        timing: null,
+        contact_details: contact.email.trim()
+      },
+      summary: clean,
+      handoff_ready: true,
+      discovery_candidate: false,
+      next_action: 'prepare_handoff',
+      next_message: 'Your message is ready for review.'
+    };
   }
 
-  function isReady(session) {
-    return session.localDraft || Boolean(session.result && session.result.handoff_ready);
+  function visitorMessages(session) {
+    return session.context
+      .filter(item => item.role === 'visitor')
+      .map(item => item.message);
   }
 
-  return { createSession, requestBody, requestReply, acceptReply, preparedText, isReady, ReceptionUnavailable };
+  function originalMessage(session) {
+    return visitorMessages(session)[0] || '';
+  }
+
+  function handoffBody(session, contact) {
+    if (!session.result || !session.result.handoff_ready) {
+      throw new TypeError('The enquiry is not ready for handoff.');
+    }
+
+    return {
+      name: contact.name.trim(),
+      email: contact.email.trim(),
+      entry_mode: session.mode,
+      original_message: originalMessage(session),
+      conversation_context: session.context.map(item => ({
+        role: item.role,
+        message: item.message
+      })),
+      summary: session.result.summary || originalMessage(session),
+      captured_context: session.result.captured_context || null,
+      session_id: session.id
+    };
+  }
+
+  async function sendHandoff(session, options = {}) {
+    const fetchImpl = options.fetchImpl || fetch;
+    const endpoint = options.endpoint || '/api/handoff';
+    const signal = options.signal;
+
+    try {
+      const response = await fetchImpl(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        cache: 'no-store',
+        signal,
+        body: JSON.stringify(handoffBody(session, options.contact))
+      });
+
+      if (!response.ok) throw new HandoffUnavailable();
+
+      const data = await response.json();
+
+      if (!data || !['accepted', 'already_processed'].includes(data.status)) {
+        throw new HandoffUnavailable();
+      }
+
+      return data;
+    } catch (error) {
+      if (signal && signal.aborted) throw error;
+      throw new HandoffUnavailable();
+    }
+  }
+
+  return {
+    createSession,
+    requestReply,
+    acceptReply,
+    prepareContact,
+    sendHandoff,
+    ReceptionUnavailable,
+    HandoffUnavailable
+  };
 });
 
 (function () {
   'use strict';
+
   const root = document.getElementById('intelligent-reception');
   if (!root || !window.YOReception) return;
+
   const api = window.YOReception;
   const get = id => document.getElementById(id);
   const form = get('reception-form');
@@ -640,13 +747,15 @@ h3 { font-size: 22px; line-height: 1.32; letter-spacing: -.025em; }
   const nameInput = get('reception-name');
   const emailInput = get('reception-email');
   const submit = get('reception-submit');
+  const confirm = get('reception-confirm');
   const transcript = get('reception-transcript');
   const radios = Array.from(root.querySelectorAll('input[name="entry_mode"]'));
   const sessions = new Map();
+
   let activeMode = 'contact';
   let pending = null;
   let requestNumber = 0;
-  const notConnected = 'Online submission is not available yet. Nothing has been sent. Please email Emre directly at emre@yo-intelligence.com.';
+
   const openings = {
     business: {
       maxFollowups: 3,
@@ -679,193 +788,395 @@ h3 { font-size: 22px; line-height: 1.32; letter-spacing: -.025em; }
     if (!sessions.has(mode)) {
       const bytes = new Uint8Array(16);
       window.crypto.getRandomValues(bytes);
-      sessions.set(mode, Object.assign(api.createSession(mode,
-        'website-' + Array.from(bytes, n => n.toString(16).padStart(2, '0')).join('')),
-        { errorMessage: '', pendingMessage: '', followups: 0 }));
+
+      sessions.set(
+        mode,
+        Object.assign(
+          api.createSession(
+            mode,
+            'website-' + Array.from(bytes, n => n.toString(16).padStart(2, '0')).join('')
+          ),
+          {
+            errorMessage: '',
+            pendingMessage: '',
+            followups: 0
+          }
+        )
+      );
     }
+
     return sessions.get(mode);
   }
-  function ready(session) { return session.mode !== 'contact' && Boolean(session.result && session.result.handoff_ready); }
-  function visitorText(session) { return session.context.filter(x => x.role === 'visitor').map(x => x.message).join('\n\n'); }
+
+  function ready(session) {
+    return Boolean(session.result && session.result.handoff_ready);
+  }
+
+  function visitorText(session) {
+    return session.context
+      .filter(item => item.role === 'visitor')
+      .map(item => item.message)
+      .join('\n\n');
+  }
+
   function addTurn(role, message) {
     const li = document.createElement('li');
     const label = document.createElement('span');
     const text = document.createElement('p');
+
     label.className = 'reception-speaker';
     label.textContent = role === 'visitor' ? 'You' : 'Guided enquiry';
     text.textContent = message;
+
     li.append(label, text);
     transcript.append(li);
   }
+
+  function contactIdentity() {
+    return {
+      name: nameInput.value.trim(),
+      email: emailInput.value.trim()
+    };
+  }
+
   function render() {
     const session = sessionFor(activeMode);
     const guided = activeMode !== 'contact';
-    const review = ready(session);
+    const review = ready(session) && !session.sent;
     const started = session.context.length > 0 || session.busy;
-    radios.forEach(radio => { radio.checked = radio.value === activeMode; });
-    nameInput.disabled = emailInput.disabled = session.busy;
-    nameInput.readOnly = emailInput.readOnly = review;
+
+    radios.forEach(radio => {
+      radio.checked = radio.value === activeMode;
+    });
+
+    nameInput.disabled = emailInput.disabled = session.busy || session.sent;
+    nameInput.readOnly = emailInput.readOnly = review || session.sent;
+
     input.value = session.draft;
-    input.disabled = session.busy || review;
-    submit.disabled = session.busy;
-    submit.textContent = session.busy ? 'Waiting for reply…' : !guided ? 'Send message' : started ? 'Send reply' : 'Start enquiry';
+    input.disabled = session.busy || review || session.sent;
+    submit.disabled = session.busy || session.sent;
+    confirm.disabled = session.busy || session.sent;
+
+    submit.textContent = session.busy
+      ? 'Waiting for reply…'
+      : activeMode === 'contact'
+        ? 'Review message'
+        : started
+          ? 'Send reply'
+          : 'Start enquiry';
+
     get('reception-panel').className = guided ? 'reception-guided' : '';
     get('reception-opening').hidden = !guided;
     get('reception-route-help').hidden = !guided;
     get('reception-route-help').textContent = guided ? openings[activeMode].helper : '';
-    get('reception-composer').hidden = review;
+
+    get('reception-composer').hidden = review || session.sent;
     get('reception-review').hidden = !review;
-    get('reception-message-label').textContent = !guided ? 'Message *' : started ? 'Your reply *' : openings[activeMode].label;
+
+    get('reception-message-label').textContent = !guided
+      ? 'Message *'
+      : started
+        ? 'Your reply *'
+        : openings[activeMode].label;
+
     input.placeholder = guided && !started ? openings[activeMode].placeholder : '';
+
     const starters = get('reception-starters');
     starters.replaceChildren();
-    starters.hidden = !guided || started || review || Boolean(session.draft);
+    starters.hidden = !guided || started || review || session.sent || Boolean(session.draft);
+
     if (guided) {
-      get('reception-phase').textContent = review ? '03 / Review' : started ? '02 / Clarify' : '01 / Context';
+      get('reception-phase').textContent = review
+        ? '03 / Review'
+        : started
+          ? '02 / Clarify'
+          : '01 / Context';
+
       get('reception-prompt').textContent = openings[activeMode].prompt;
       get('reception-prompt').hidden = started || review;
       get('reception-guidance').hidden = started || review;
-      get('reception-guidance').textContent = `Share the context. Answer up to ${openings[activeMode].maxFollowups} focused follow-up questions only if useful, then review your enquiry before submitting.`;
-      if (!started && !review) openings[activeMode].starters.forEach(([label, text]) => {
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.textContent = label;
-        button.addEventListener('click', () => {
-          // A starter only fills editable text. It never submits or invents a reply.
-          input.value = session.draft = text;
-          starters.hidden = true;
-          input.focus();
+      get('reception-guidance').textContent =
+        `Share the context. Answer up to ${openings[activeMode].maxFollowups} focused follow-up questions only if useful, then review your enquiry before submitting.`;
+
+      if (!started && !review) {
+        openings[activeMode].starters.forEach(([label, text]) => {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.textContent = label;
+
+          button.addEventListener('click', () => {
+            input.value = session.draft = text;
+            starters.hidden = true;
+            input.focus();
+          });
+
+          starters.append(button);
         });
-        starters.append(button);
-      });
+      }
     }
+
     transcript.replaceChildren();
-    if (guided && !review) {
+
+    if (guided && !review && !session.sent) {
       session.context.forEach(turn => addTurn(turn.role, turn.message));
-      if (session.pendingMessage) addTurn('visitor', session.pendingMessage);
+
+      if (session.pendingMessage) {
+        addTurn('visitor', session.pendingMessage);
+      }
     }
-    transcript.hidden = !guided || review || transcript.children.length === 0;
+
+    transcript.hidden =
+      !guided || review || session.sent || transcript.children.length === 0;
+
     if (review) {
-      const summary = session.result.summary;
+      const summary = session.result && session.result.summary;
+
       get('reception-summary-label').textContent = summary ? 'Summary' : 'Your enquiry';
       get('reception-summary-text').textContent = summary || visitorText(session);
       get('reception-original-text').textContent = visitorText(session);
       get('reception-history').hidden = !summary;
     }
+
     get('reception-error').hidden = !session.errorMessage;
     get('reception-error').textContent = session.errorMessage;
     get('reception-fallback').hidden = !guided || !session.errorMessage;
-    get('reception-direct-email').hidden = guided && !session.errorMessage;
-    get('reception-status').textContent = session.busy ? 'Waiting for the enquiry service…' : '';
+    get('reception-direct-email').hidden =
+      guided && !session.errorMessage && !session.sent;
+
+    get('reception-status').textContent = session.busy
+      ? (review ? 'Sending your enquiry…' : 'Waiting for the enquiry service…')
+      : '';
+
+    get('reception-success').hidden = !session.sent;
+
     root.setAttribute('aria-busy', String(session.busy));
   }
+
   function cancelRequest() {
     requestNumber += 1;
-    if (pending) { pending.abort(); pending = null; }
+
+    if (pending) {
+      pending.abort();
+      pending = null;
+    }
+
     const session = sessionFor(activeMode);
     session.busy = false;
     session.pendingMessage = '';
   }
+
   function switchMode(mode) {
     const current = sessionFor(activeMode);
-    if (!ready(current)) current.draft = input.value;
+
+    if (!ready(current) && !current.sent) {
+      current.draft = input.value;
+    }
+
     cancelRequest();
     activeMode = mode;
     render();
   }
+
   function validate() {
     nameInput.value = nameInput.value.trim();
     emailInput.value = emailInput.value.trim();
-    nameInput.setCustomValidity(nameInput.value ? '' : 'Please enter your name.');
-    input.setCustomValidity(input.value.trim() ? '' : 'Please enter a message.');
+
+    nameInput.setCustomValidity(
+      nameInput.value ? '' : 'Please enter your name.'
+    );
+
+    input.setCustomValidity(
+      input.value.trim() ? '' : 'Please enter a message.'
+    );
+
     return form.reportValidity();
   }
-  radios.forEach(radio => radio.addEventListener('change', () => switchMode(radio.value)));
-  nameInput.addEventListener('input', () => nameInput.setCustomValidity(''));
+
+  radios.forEach(radio => {
+    radio.addEventListener('change', () => switchMode(radio.value));
+  });
+
+  nameInput.addEventListener('input', () => {
+    nameInput.setCustomValidity('');
+  });
+
   input.addEventListener('input', () => {
     input.setCustomValidity('');
     sessionFor(activeMode).draft = input.value;
     get('reception-starters').hidden = Boolean(input.value);
   });
+
   form.addEventListener('submit', async event => {
     event.preventDefault();
+
     const session = sessionFor(activeMode);
-    if (session.busy || ready(session) || !validate()) return;
-    session.draft = input.value.trim();
-    // Direct contact has no AI/reception call and no fabricated submission.
-    if (activeMode === 'contact') {
-      session.errorMessage = notConnected;
-      render();
+
+    if (session.busy || session.sent || ready(session) || !validate()) {
       return;
     }
-    const message = session.draft;
-    const contact = { name: nameInput.value, email: emailInput.value };
+
+    session.draft = input.value.trim();
     session.errorMessage = '';
+
+    const contact = contactIdentity();
+
+    if (activeMode === 'contact') {
+      api.prepareContact(session, session.draft, contact);
+      render();
+      get('reception-review-title').focus();
+      get('reception-live').textContent =
+        'Your message is ready for review. Nothing has been sent.';
+      return;
+    }
+
+    const message = session.draft;
+
     session.busy = true;
     session.pendingMessage = message;
+
     const thisRequest = ++requestNumber;
     const controller = new AbortController();
     pending = controller;
+
     const timer = setTimeout(() => controller.abort(), 45000);
+
     render();
+
     try {
-      if (window.location.protocol === 'file:') throw new api.ReceptionUnavailable();
+      if (window.location.protocol === 'file:') {
+        throw new api.ReceptionUnavailable();
+      }
+
       const reply = await api.requestReply(session, message, {
-        contact, endpoint: root.dataset.receptionEndpoint, signal: controller.signal
+        contact,
+        endpoint: root.dataset.receptionEndpoint,
+        signal: controller.signal
       });
+
       if (thisRequest !== requestNumber) return;
-      // UI turn bound only. Backend still owns question selection and policy.
-      // Reject an extra follow-up instead of inventing a summary to end the flow.
-      if (!reply.handoff_ready && session.followups >= openings[session.mode].maxFollowups) throw new api.ReceptionUnavailable();
+
+      if (!reply.handoff_ready &&
+          session.followups >= openings[session.mode].maxFollowups) {
+        throw new api.ReceptionUnavailable();
+      }
+
       api.acceptReply(session, message, reply);
-      if (!reply.handoff_ready) session.followups += 1;
+
+      if (!reply.handoff_ready) {
+        session.followups += 1;
+      }
     } catch (_) {
       if (thisRequest !== requestNumber) return;
-      session.errorMessage = 'The guided enquiry could not continue. Your text is still here. You can email Emre directly or use Contact Emre. Nothing has been submitted.';
+
+      session.errorMessage =
+        'The guided enquiry could not continue. Your text is still here. You can email Emre directly or use Contact Emre. Nothing has been submitted.';
     } finally {
       clearTimeout(timer);
+
       if (thisRequest === requestNumber) {
         session.busy = false;
         session.pendingMessage = '';
         pending = null;
+
         render();
-        get('reception-live').textContent = ready(session) ? 'Your enquiry is ready for review. Nothing has been submitted.' : !session.errorMessage && session.result ? session.result.next_message : '';
-        if (ready(session)) get('reception-review-title').focus();
-        else if (!session.errorMessage) input.focus();
+
+        get('reception-live').textContent = ready(session)
+          ? 'Your enquiry is ready for review. Nothing has been submitted.'
+          : !session.errorMessage && session.result
+            ? session.result.next_message
+            : '';
+
+        if (ready(session)) {
+          get('reception-review-title').focus();
+        } else if (!session.errorMessage) {
+          input.focus();
+        }
       }
     }
   });
-  get('reception-confirm').addEventListener('click', () => {
+
+  confirm.addEventListener('click', async () => {
     const session = sessionFor(activeMode);
-    if (!ready(session)) return;
-    // Future integration boundary. No handoff endpoint or receipt is invented.
-    session.errorMessage = notConnected;
+
+    if (!ready(session) || session.busy || session.sent) {
+      return;
+    }
+
+    session.errorMessage = '';
+    session.busy = true;
     render();
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 30000);
+
+    try {
+      if (window.location.protocol === 'file:') {
+        throw new api.HandoffUnavailable();
+      }
+
+      const result = await api.sendHandoff(session, {
+        contact: contactIdentity(),
+        endpoint: root.dataset.handoffEndpoint,
+        signal: controller.signal
+      });
+
+      session.sent =
+        result.status === 'accepted' ||
+        result.status === 'already_processed';
+
+      if (!session.sent) {
+        throw new api.HandoffUnavailable();
+      }
+
+      get('reception-live').textContent =
+        'Your enquiry has been received. Emre will review it and get back to you.';
+    } catch (_) {
+      session.errorMessage =
+        'Your enquiry could not be sent. Nothing has been confirmed as received. Please try again or email Emre directly.';
+    } finally {
+      clearTimeout(timer);
+      session.busy = false;
+      render();
+    }
   });
+
   get('reception-edit').addEventListener('click', () => {
     const session = sessionFor(activeMode);
     const text = visitorText(session);
+
     sessions.delete(activeMode);
     sessionFor(activeMode).draft = text;
+
     get('reception-history').open = false;
+
     render();
     input.focus();
   });
+
   get('reception-fallback').addEventListener('click', () => {
     const old = sessionFor(activeMode);
-    const text = [visitorText(old), old.draft].filter(Boolean).join('\n\n');
+    const text = [visitorText(old), old.draft]
+      .filter(Boolean)
+      .join('\n\n');
+
     switchMode('contact');
+
     const direct = sessionFor('contact');
-    direct.draft = [direct.draft, text].filter(Boolean).join('\n\n');
+    direct.draft = [direct.draft, text]
+      .filter(Boolean)
+      .join('\n\n');
+
     direct.errorMessage = '';
+
     render();
     input.focus();
   });
+
   get('reception-noscript').hidden = true;
   get('reception-controls').hidden = false;
+
   render();
 })();
-
 </script>
 </body>
 </html>
