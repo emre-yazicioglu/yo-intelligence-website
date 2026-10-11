@@ -457,7 +457,7 @@ h3 { font-size: 22px; line-height: 1.32; letter-spacing: -.025em; }
             <p>He will review the context and discuss whether Y/O Intelligence is a good fit and what a useful first step could look like.</p>
           </div>
         </div>
-        <div id="intelligent-reception" data-reception-endpoint="https://yo-intelligence-discovery-runtime.onrender.com/api/reception" data-handoff-endpoint="https://yo-intelligence-discovery-runtime.onrender.com/api/handoff" aria-label="Contact and guided enquiry">
+        <div id="intelligent-reception" data-reception-endpoint="/api/reception" data-handoff-endpoint="/api/handoff" aria-label="Contact and guided enquiry">
           <p id="reception-noscript">The enquiry interface requires JavaScript. You can email <a href="mailto:emre@yo-intelligence.com">emre@yo-intelligence.com</a> directly.</p>
           <div id="reception-controls" hidden>
             <fieldset class="reception-modes">
@@ -860,13 +860,13 @@ h3 { font-size: 22px; line-height: 1.32; letter-spacing: -.025em; }
     submit.textContent = session.busy
       ? 'Waiting for reply…'
       : activeMode === 'contact'
-        ? 'Review message'
+        ? 'Send message'
         : started
           ? 'Send reply'
           : 'Start enquiry';
 
     get('reception-panel').className = guided ? 'reception-guided' : '';
-    get('reception-opening').hidden = !guided;
+    get('reception-opening').hidden = !guided || session.sent;
     get('reception-route-help').hidden = !guided;
     get('reception-route-help').textContent = guided ? openings[activeMode].helper : '';
 
@@ -1022,10 +1022,42 @@ h3 { font-size: 22px; line-height: 1.32; letter-spacing: -.025em; }
 
     if (activeMode === 'contact') {
       api.prepareContact(session, session.draft, contact);
+      session.busy = true;
       render();
-      get('reception-review-title').focus();
-      get('reception-live').textContent =
-        'Your message is ready for review. Nothing has been sent.';
+
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 30000);
+
+      try {
+        if (window.location.protocol === 'file:') {
+          throw new api.HandoffUnavailable();
+        }
+
+        const result = await api.sendHandoff(session, {
+          contact,
+          endpoint: root.dataset.handoffEndpoint,
+          signal: controller.signal
+        });
+
+        session.sent =
+          result.status === 'accepted' ||
+          result.status === 'already_processed';
+
+        if (!session.sent) {
+          throw new api.HandoffUnavailable();
+        }
+
+        get('reception-live').textContent =
+          'Your message has been received. Emre will review it and get back to you.';
+      } catch (_) {
+        session.errorMessage =
+          'Your message could not be sent. Nothing has been confirmed as received. Please try again or email Emre directly.';
+      } finally {
+        clearTimeout(timer);
+        session.busy = false;
+        render();
+      }
+
       return;
     }
 
